@@ -32,8 +32,10 @@ CREATE TABLES SECTION
 create table tbl_books(
 PK_bookID int not null primary key identity (1,1), 
 title nvarchar(50) not null, 
-publisherName nvarchar(50) not null
+FK_publisherName nvarchar(50) not null
 );
+
+select * from tbl_books
 
 
 
@@ -74,12 +76,14 @@ add constraint PK_name primary key (name)
 
 
 create table tbl_bookLoans(
-bookID int not null foreign key references tbl_books(PK_bookID),
-branchID  int not null foreign key references tbl_libraryBranch(PK_branchID),
+FK_bookID int not null foreign key references tbl_books(PK_bookID),
+FK_branchID  int not null foreign key references tbl_libraryBranch(PK_branchID),
 FK_CardNo int not null foreign key references tbl_borrower(PK_cardNO),
 dateOut date not null,
 dueDate date not null
 );
+
+select * from tbl_bookLoans
 
 create table tbl_bookCopies(
 FK_bookID int not null foreign key references tbl_books(PK_bookID), 
@@ -322,7 +326,9 @@ How many copies of the book titled "The Lost Tribe" are owned by the library bra
 create procedure usp_copiesTheLostTribeInSharpstown
 as 
 begin
-	select noOfCopies from tbl_bookCopies
+	select tbl_bookCopies.noOfCopies, tbl_books.title, tbl_libraryBranch.branchName from tbl_bookCopies
+	inner join tbl_books on tbl_books.PK_bookID = tbl_bookCopies.FK_bookID
+	inner join tbl_libraryBranch on tbl_libraryBranch.PK_branchID = tbl_bookCopies.FK_branchID
 	where FK_bookID = 20 and FK_branchID = 1
 	;
 end
@@ -337,8 +343,9 @@ How many copies of the book titled "The Lost Tribe" are owned by each library br
 create procedure usp_copiesTheLostTribeInBranch
 as 
 begin
-	select tbl_bookCopies.noOfCopies, tbl_libraryBranch.branchName from tbl_libraryBranch
+	select tbl_bookCopies.noOfCopies, tbl_libraryBranch.branchName, tbl_books.title from tbl_libraryBranch
 	inner join tbl_bookCopies on tbl_bookCopies.FK_branchID = tbl_libraryBranch.PK_branchID
+	inner join tbl_books on tbl_books.PK_bookID = tbl_bookCopies.FK_bookID
 	where tbl_bookCopies.FK_bookID = 20
 	;
 end
@@ -352,9 +359,10 @@ Retrieve the names of all borrowers who do not have any books checked out.
 create procedure usp_BorrowersNoLoans
 as 
 begin
-	select name from tbl_borrower
-	where tbl_borrower.PK_cardNo not in (select FK_CardNo from tbl_bookLoans)
-	;
+select name from tbl_borrower
+left join tbl_bookloans on tbl_bookloans.FK_CardNo = tbl_borrower.PK_cardNo
+where tbl_bookLoans.FK_CardNo is null
+;
 end
 
 
@@ -367,11 +375,12 @@ retrieve the book title, the borrower's name, and the borrower's address.
 create procedure usp_booksDueSharpstown
 as 
 begin
-	select tbl_books.title, tbl_borrower.name, tbl_borrower.address from tbl_books, tbl_borrower, tbl_libraryBranch, tbl_bookLoans
-	where tbl_libraryBranch.PK_branchID = '1' 
-	and tbl_bookLoans.dueDate = '2017-12-06'
-	and tbl_bookLoans.FK_bookID = tbl_libraryBranch.PK_branchID
-	;
+	select tbl_libraryBranch.branchName, tbl_bookloans.dueDate, tbl_books.title, tbl_borrower.name, tbl_borrower.address from tbl_borrower
+	inner join tbl_bookloans on tbl_bookloans.FK_CardNo = tbl_borrower.PK_cardNo
+	inner join tbl_books on tbl_books.PK_bookID = tbl_bookloans.FK_bookID
+	inner join tbl_libraryBranch on tbl_libraryBranch.PK_branchID = tbl_bookLoans.FK_branchID
+	where tbl_libraryBranch.branchName = 'Sharpstown' and tbl_bookloans.dueDate = '2017-12-07'
+    ;
 end
 
 
@@ -383,7 +392,7 @@ For each library branch, retrieve the branch name and the total number of books 
 create procedure usp_LoansBranches
 as 
 begin
-	select count(tbl_bookLoans.FK_branchID) as booksLoanedFrom
+	select count(tbl_libraryBranch.branchName) as booksLoanedFrom
 	from tbl_libraryBranch
 	inner join tbl_bookLoans on tbl_bookLoans.FK_branchID = tbl_libraryBranch.PK_branchID
 	group by tbl_bookLoans.FK_branchID
@@ -403,14 +412,11 @@ more than five books checked out.
 create procedure usp_LoansBorrowersOverFive
 as 
 begin
-	select count(tbl_bookLoans.FK_cardNo) as booksLoanedTo
+	select tbl_borrower.name, tbl_borrower.address, count(tbl_bookLoans.FK_cardNo) as booksLoanedTo
 	from tbl_bookLoans
 	inner join tbl_borrower on tbl_borrower.PK_cardNo = tbl_bookLoans.FK_CardNo
-	group by tbl_borrower.PK_cardNo
-	;
-
-	select tbl_borrower.name from tbl_borrower
-	where tbl_borrower.PK_cardNo in (select FK_CardNo from tbl_bookLoans)
+	group by tbl_borrower.PK_cardNo, tbl_borrower.name, tbl_borrower.address
+	having count(tbl_bookloans.FK_cardNo) > 5
 	;
 end
 
